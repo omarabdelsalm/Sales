@@ -12,11 +12,65 @@ public class ApiDataService : IDataService
         _http = http;
     }
 
+    public string BaseUrl => _http.BaseAddress?.ToString()?.TrimEnd('/') ?? "";
+
+    private async Task<T?> SafeGetAsync<T>(string url)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<T>(url);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"API Error (GET {url}): {ex.Message}");
+            return default;
+        }
+    }
+
+    private async Task<HttpResponseMessage?> SafePostAsync<T>(string url, T data)
+    {
+        try
+        {
+            return await _http.PostAsJsonAsync(url, data);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"API Error (POST {url}): {ex.Message}");
+            return null;
+        }
+    }
+
+    private async Task<HttpResponseMessage?> SafePutAsync<T>(string url, T data)
+    {
+        try
+        {
+            return await _http.PutAsJsonAsync(url, data);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"API Error (PUT {url}): {ex.Message}");
+            return null;
+        }
+    }
+
+    private async Task<HttpResponseMessage?> SafeDeleteAsync(string url)
+    {
+        try
+        {
+            return await _http.DeleteAsync(url);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"API Error (DELETE {url}): {ex.Message}");
+            return null;
+        }
+    }
+
     // ---- Auth ----
     public async Task<AppUser?> LoginAsync(string email, string password)
     {
-        var response = await _http.PostAsJsonAsync("api/auth/login", new { Email = email, Password = password });
-        if (response.IsSuccessStatusCode)
+        var response = await SafePostAsync("api/auth/login", new { Email = email, Password = password });
+        if (response?.IsSuccessStatusCode == true)
         {
             return await response.Content.ReadFromJsonAsync<AppUser>();
         }
@@ -25,78 +79,80 @@ public class ApiDataService : IDataService
 
     public async Task<(bool Success, string Message)> RegisterAsync(string fullName, string email, string password, UserRole role, string? storeName = null)
     {
-        var response = await _http.PostAsJsonAsync("api/auth/register", new { FullName = fullName, Email = email, Password = password, Role = role, StoreName = storeName });
+        var response = await SafePostAsync("api/auth/register", new { FullName = fullName, Email = email, Password = password, Role = role, StoreName = storeName });
+        if (response == null) return (false, "خطأ في الاتصال بالسيرفر");
         var result = await response.Content.ReadFromJsonAsync<AuthResult>();
-        return (result?.Success ?? false, result?.Message ?? "خطأ في الاتصال بالسيرفر");
+        return (result?.Success ?? false, result?.Message ?? "خطأ في معالجة البيانات");
     }
 
     public async Task<(bool Success, string Message)> DeleteAccountAsync(int userId)
     {
-        var response = await _http.DeleteAsync($"api/auth/account/{userId}");
+        var response = await SafeDeleteAsync($"api/auth/account/{userId}");
+        if (response == null) return (false, "خطأ في الاتصال بالسيرفر");
         var result = await response.Content.ReadFromJsonAsync<AuthResult>();
-        return (result?.Success ?? false, result?.Message ?? "خطأ في الاتصال بالسيرفر");
+        return (result?.Success ?? false, result?.Message ?? "خطأ في معالجة البيانات");
     }
 
     public async Task<bool> UpdateSubscriptionAsync(int userId, int months)
     {
-        var response = await _http.PostAsJsonAsync($"api/auth/subscribe/{userId}", new { Months = months });
-        return response.IsSuccessStatusCode;
+        var response = await SafePostAsync($"api/auth/subscribe/{userId}", new { Months = months });
+        return response?.IsSuccessStatusCode == true;
     }
 
     // ---- Products ----
     public async Task<List<Product>> GetProductsAsync()
     {
-        return await _http.GetFromJsonAsync<List<Product>>("api/products") ?? new();
+        return await SafeGetAsync<List<Product>>("api/products") ?? new();
     }
 
     public async Task<List<Product>> GetMerchantProductsAsync(int merchantId)
     {
-        return await _http.GetFromJsonAsync<List<Product>>($"api/products/merchant/{merchantId}") ?? new();
+        return await SafeGetAsync<List<Product>>($"api/products/merchant/{merchantId}") ?? new();
     }
 
     public async Task<Product?> GetProductByIdAsync(int id)
     {
-        return await _http.GetFromJsonAsync<Product>($"api/products/{id}");
+        return await SafeGetAsync<Product>($"api/products/{id}");
     }
 
     public async Task<(bool Success, string Message)> SaveProductAsync(Product product)
     {
-        HttpResponseMessage response;
+        HttpResponseMessage? response;
         if (product.Id == 0)
-            response = await _http.PostAsJsonAsync("api/products", product);
+            response = await SafePostAsync("api/products", product);
         else
-            response = await _http.PutAsJsonAsync($"api/products/{product.Id}", product);
+            response = await SafePutAsync($"api/products/{product.Id}", product);
 
-        if (response.IsSuccessStatusCode)
+        if (response?.IsSuccessStatusCode == true)
             return (true, "تم الحفظ بنجاح");
         
-        return (false, "فشل الحفظ");
+        return (false, "فشل الحفظ أو الاتصال بالسيرفر");
     }
 
     public async Task<(bool Success, string Message)> DeleteProductAsync(int id, int merchantId)
     {
-        var response = await _http.DeleteAsync($"api/products/{id}?merchantId={merchantId}");
-        if (response.IsSuccessStatusCode)
+        var response = await SafeDeleteAsync($"api/products/{id}?merchantId={merchantId}");
+        if (response?.IsSuccessStatusCode == true)
             return (true, "تم الحذف بنجاح");
         
-        return (false, "فشل الحذف");
+        return (false, "فشل الحذف أو الاتصال بالسيرفر");
     }
 
     // ---- Orders ----
     public async Task<List<Order>> GetUserOrdersAsync(int userId)
     {
-        return await _http.GetFromJsonAsync<List<Order>>($"api/orders/user/{userId}") ?? new();
+        return await SafeGetAsync<List<Order>>($"api/orders/user/{userId}") ?? new();
     }
 
     public async Task<List<Order>> GetMerchantOrdersAsync(int merchantId)
     {
-        return await _http.GetFromJsonAsync<List<Order>>($"api/orders/merchant/{merchantId}") ?? new();
+        return await SafeGetAsync<List<Order>>($"api/orders/merchant/{merchantId}") ?? new();
     }
 
     public async Task<(bool Success, string Message, int OrderId)> CreateOrderAsync(Order order)
     {
-        var response = await _http.PostAsJsonAsync("api/orders", order);
-        if (response.IsSuccessStatusCode)
+        var response = await SafePostAsync("api/orders", order);
+        if (response?.IsSuccessStatusCode == true)
         {
             var result = await response.Content.ReadFromJsonAsync<OrderResult>();
             return (true, "تم الطلب بنجاح", result?.OrderId ?? 0);
@@ -106,61 +162,61 @@ public class ApiDataService : IDataService
 
     public async Task<bool> UpdateOrderStatusAsync(int orderId, OrderStatus status)
     {
-        var response = await _http.PutAsJsonAsync($"api/orders/{orderId}/status", status);
-        return response.IsSuccessStatusCode;
+        var response = await SafePutAsync($"api/orders/{orderId}/status", status);
+        return response?.IsSuccessStatusCode == true;
     }
 
     public async Task<int> GetMerchantOrdersCountAsync(int merchantId)
     {
-        return await _http.GetFromJsonAsync<int>($"api/orders/merchant/{merchantId}/count");
+        return await SafeGetAsync<int>($"api/orders/merchant/{merchantId}/count");
     }
 
     public async Task<decimal> GetMerchantTotalRevenueAsync(int merchantId)
     {
-        return await _http.GetFromJsonAsync<decimal>($"api/orders/merchant/{merchantId}/revenue");
+        return await SafeGetAsync<decimal>($"api/orders/merchant/{merchantId}/revenue");
     }
 
     // ---- Cart ----
     public async Task<List<CartItem>> GetCartItemsAsync(int userId)
     {
-        return await _http.GetFromJsonAsync<List<CartItem>>($"api/cart/{userId}") ?? new();
+        return await SafeGetAsync<List<CartItem>>($"api/cart/{userId}") ?? new();
     }
 
     public async Task<int> GetCartCountAsync(int userId)
     {
-        return await _http.GetFromJsonAsync<int>($"api/cart/{userId}/count");
+        return await SafeGetAsync<int>($"api/cart/{userId}/count");
     }
 
     public async Task<(bool Success, string Message)> AddToCartAsync(int userId, int productId, int quantity)
     {
-        var response = await _http.PostAsJsonAsync($"api/cart/{userId}/add", new { ProductId = productId, Quantity = quantity });
-        if (response.IsSuccessStatusCode)
+        var response = await SafePostAsync($"api/cart/{userId}/add", new { ProductId = productId, Quantity = quantity });
+        if (response?.IsSuccessStatusCode == true)
             return (true, "تمت الإضافة للسلة");
         return (false, "فشل الإضافة للسلة");
     }
 
     public async Task<bool> RemoveFromCartAsync(int userId, int productId)
     {
-        var response = await _http.DeleteAsync($"api/cart/{userId}/{productId}");
-        return response.IsSuccessStatusCode;
+        var response = await SafeDeleteAsync($"api/cart/{userId}/{productId}");
+        return response?.IsSuccessStatusCode == true;
     }
 
     public async Task<bool> ClearCartAsync(int userId)
     {
-        var response = await _http.DeleteAsync($"api/cart/{userId}");
-        return response.IsSuccessStatusCode;
+        var response = await SafeDeleteAsync($"api/cart/{userId}");
+        return response?.IsSuccessStatusCode == true;
     }
 
     // ---- Admin ----
     public async Task<List<AppUser>> GetMerchantsAsync()
     {
-        return await _http.GetFromJsonAsync<List<AppUser>>("api/admin/merchants") ?? new();
+        return await SafeGetAsync<List<AppUser>>("api/admin/merchants") ?? new();
     }
 
     public async Task<bool> UpdateSubscriptionAsync(int userId, DateTime? endDate)
     {
-        var response = await _http.PutAsJsonAsync($"api/admin/merchants/{userId}/subscription", endDate);
-        return response.IsSuccessStatusCode;
+        var response = await SafePutAsync($"api/admin/merchants/{userId}/subscription", endDate);
+        return response?.IsSuccessStatusCode == true;
     }
 
     private class AuthResult { public bool Success { get; set; } public string Message { get; set; } = ""; }

@@ -38,7 +38,7 @@
                     <div class="cart-item-card">
                         @if (!string.IsNullOrEmpty(item.Product?.ImagePath))
                         {
-                            <img src="@item.Product.ImagePath" alt="@item.Product?.Name" class="cart-item-img" />
+                            <img src="@(Data.BaseUrl + item.Product.ImagePath)" alt="@item.Product?.Name" class="cart-item-img" />
                         }
                         else
                         {

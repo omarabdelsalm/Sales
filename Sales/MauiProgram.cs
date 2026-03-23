@@ -1,7 +1,6 @@
 using Sales.Shared.Services;
 using Sales.Services;
 using Sales.Shared.Data;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Sales;
@@ -23,12 +22,18 @@ public static class MauiProgram
         builder.Services.AddScoped<IFileUploadService, MauiFileUploadService>();
 
         // Configure HttpClient for API communication
-        // TODO: Change this to your production API URL when deploying
-        var baseAddress = DeviceInfo.Platform == DevicePlatform.Android 
-            ? "https://10.0.2.2:7154" // Android Emulator access to host localhost
-            : "https://localhost:7154"; 
+        var baseAddress = "https://sales3abed.runasp.net/"; 
 
-        builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(baseAddress) });
+        builder.Services.AddScoped(sp => 
+        {
+            var handler = new HttpClientHandler();
+            // Ignore SSL certificate errors for localhost in debug/dev
+            if (baseAddress.Contains("localhost") || baseAddress.Contains("10.0.2.2"))
+            {
+                handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
+            }
+            return new HttpClient(handler) { BaseAddress = new Uri(baseAddress) };
+        });
 
         // Add Data Service (API Client for MAUI)
         builder.Services.AddScoped<IDataService, ApiDataService>();

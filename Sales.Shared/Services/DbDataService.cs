@@ -15,6 +15,8 @@ public class DbDataService : IDataService
         _db = db;
     }
 
+    public string BaseUrl => ""; // On Web, relative paths work fine
+
     // ---- Auth ----
     public async Task<AppUser?> LoginAsync(string email, string password)
     {

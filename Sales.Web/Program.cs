@@ -11,30 +11,37 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddControllers(); // لدعم الـ API للربط مع الموبايل
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    });
 
 // Add EF Core with Database Switching (SQLite for Dev, SQL Server for Prod)
 if (builder.Environment.IsDevelopment())
 {
-    var dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "sales.db");
+    // استخدام قاعدة بيانات محلية في المجلد الرئيسي للمشروع للتطوير
+    var dbPath = Path.Combine(builder.Environment.ContentRootPath, "sales.db");
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseSqlite($"Data Source={dbPath}"));
+    Console.WriteLine($"[DEBUG] Using SQLite Database at: {dbPath}");
 }
 else
 {
-    // عند الرفع للإنتاج، استخدم SQL Server من ملف الإعدادات
+    // عند الرفع للإنتاج، استخدم SQL Server
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    Console.WriteLine("[DEBUG] Using SQL Server Database");
 }
 
-// Auth service (scoped so each user session has its own instance)
+// Auth service
 builder.Services.AddScoped<IDataService, DbDataService>();
 builder.Services.AddScoped<AuthService>();
 
 // Device-specific services
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
 
-// File upload service (uses IWebHostEnvironment to resolve wwwroot/uploads path)
+// File upload service
 builder.Services.AddScoped<IFileUploadService, WebFileUploadService>();
 
 var app = builder.Build();
@@ -42,33 +49,38 @@ var app = builder.Build();
 // Auto-migrate database on startup
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
-
-    // ---- Seed Default Admin ----
-    var adminEmail = "admin@sales.com";
-    if (!db.Users.Any(u => u.Role == Sales.Shared.Models.UserRole.Admin))
+    try 
     {
-        var existingUser = db.Users.FirstOrDefault(u => u.Email == adminEmail);
-        if (existingUser != null)
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Database.EnsureCreated();
+
+        // ---- Seed Default Admin ----
+        var adminEmail = "admin@sales.com";
+        if (!db.Users.Any(u => u.Role == Sales.Shared.Models.UserRole.Admin))
         {
-            // If user exists with this email but isn't admin, promote them
-            existingUser.Role = UserRole.Admin;
-        }
-        else
-        {
-            // Create new admin
-            var admin = new AppUser
+            var existingUser = db.Users.FirstOrDefault(u => u.Email == adminEmail);
+            if (existingUser != null)
             {
-                FullName = "مدير النظام",
-                Email = adminEmail,
-                PasswordHash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918", // Hash for 'admin'
-                Role = UserRole.Admin,
-                CreatedAt = DateTime.UtcNow
-            };
-            db.Users.Add(admin);
+                existingUser.Role = UserRole.Admin;
+            }
+            else
+            {
+                var admin = new AppUser
+                {
+                    FullName = "مدير النظام",
+                    Email = adminEmail,
+                    PasswordHash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918", // admin
+                    Role = UserRole.Admin,
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.Users.Add(admin);
+            }
+            db.SaveChanges();
         }
-        db.SaveChanges();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[ERROR] Database Initialization Failed: {ex.Message}");
     }
 }
 
@@ -81,7 +93,8 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 app.UseAntiforgery();
-app.MapControllers(); // تفعيل روابط الـ API
+app.MapControllers(); 
+app.UseStaticFiles();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()

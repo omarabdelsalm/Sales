@@ -111,7 +111,7 @@
                             <td>
                                 @if (!string.IsNullOrEmpty(p.ImagePath))
                                 {
-                                    <img src="@p.ImagePath" alt="@p.Name" class="table-product-img" />
+                                    <img src="@(Data.BaseUrl + p.ImagePath)" alt="@p.Name" class="table-product-img" />
                                 }
                                 else
                                 {

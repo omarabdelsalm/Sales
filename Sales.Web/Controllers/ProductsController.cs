@@ -55,4 +55,23 @@ public class ProductsController : ControllerBase
     {
         return await _data.DeleteProductAsync(id, merchantId);
     }
+
+    [HttpPost("upload")]
+    public async Task<IActionResult> UploadImage([FromServices] IFileUploadService fileUpload)
+    {
+        try
+        {
+            var file = Request.Form.Files.FirstOrDefault();
+            if (file == null) return BadRequest("لم يتم اختيار ملف");
+
+            using var stream = file.OpenReadStream();
+            var path = await fileUpload.SaveImageAsync(stream, file.FileName);
+            
+            return Ok(new { Path = path });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest($"خطأ في رفع الملف: {ex.Message}");
+        }
+    }
 }

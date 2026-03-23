@@ -4,6 +4,8 @@ namespace Sales.Shared.Services;
 
 public interface IDataService
 {
+    string BaseUrl { get; }
+
     // ---- Auth ----
     Task<AppUser?> LoginAsync(string email, string password);
     Task<(bool Success, string Message)> RegisterAsync(string fullName, string email, string password, UserRole role, string? storeName = null);

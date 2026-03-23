@@ -62,7 +62,7 @@
                 <InputFile OnChange="HandleImageUpload" accept="image/*" class="form-control" />
                 @if (!string.IsNullOrEmpty(_previewImage))
                 {
-                    <img src="@_previewImage" alt="معاينة" class="img-preview" />
+                    <img src="@(_previewImage.StartsWith("http") ? _previewImage : Data.BaseUrl + _previewImage)" alt="معاينة" class="img-preview" />
                 }
             </div>
 

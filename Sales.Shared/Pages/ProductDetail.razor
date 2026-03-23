@@ -34,7 +34,7 @@ else
             <div class="product-detail-image">
                 @if (!string.IsNullOrEmpty(_product.ImagePath))
                 {
-                    <img src="@_product.ImagePath" alt="@_product.Name" class="detail-img" />
+                    <img src="@(Data.BaseUrl + _product.ImagePath)" alt="@_product.Name" class="detail-img" />
                 }
                 else
                 {
