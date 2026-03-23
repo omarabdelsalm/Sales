@@ -100,13 +100,15 @@
                     @if (_selectedMethod == PaymentMethod.VodafoneCash)
                     {
                         <div class="payment-instruction">
-                            📌 يرجى تحويل المبلغ إلى الرقم: <strong>01012345678</strong> ثم كتابة رقم العملية في الملاحظات.
+                            📌 يرجى تحويل المبلغ إلى الرقم: <strong>@(_items.FirstOrDefault()?.Product?.Merchant?.VodafoneCashNumber ?? "غير محدد")</strong> ثم كتابة رقم العملية بالأسفل.
+                            <input type="text" class="form-control" style="margin-top:10px;" @bind="_paymentRef" placeholder="رقم العملية / رقم المحول" />
                         </div>
                     }
                     else if (_selectedMethod == PaymentMethod.InstaPay)
                     {
                         <div class="payment-instruction">
-                            📌 يرجى التحويل عبر انستاباي إلى: <strong>user@instapay</strong> ثم كتابة اسم المحول في الملاحظات.
+                            📌 يرجى التحويل عبر انستاباي إلى: <strong>@(_items.FirstOrDefault()?.Product?.Merchant?.InstaPayId ?? "غير محدد")</strong> ثم كتابة اسم المحول بالأسفل.
+                            <input type="text" class="form-control" style="margin-top:10px;" @bind="_paymentRef" placeholder="اسم المحول / رقم العملية" />
                         </div>
                     }
                 </div>
@@ -131,6 +133,7 @@
     private bool _orderSuccess;
     private bool _loading;
     private PaymentMethod _selectedMethod = PaymentMethod.CashOnDelivery;
+    private string _paymentRef = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -172,6 +175,7 @@
                 TotalAmount = group.Sum(i => (i.Product?.Price ?? 0) * i.Quantity),
                 Status = OrderStatus.Pending,
                 PaymentMethod = _selectedMethod,
+                PaymentReference = (_selectedMethod == PaymentMethod.VodafoneCash || _selectedMethod == PaymentMethod.InstaPay) ? _paymentRef : null,
                 Items = group.Select(i => new OrderItem
                 {
                     ProductId = i.ProductId,

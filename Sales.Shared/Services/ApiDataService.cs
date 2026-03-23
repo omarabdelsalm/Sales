@@ -99,6 +99,19 @@ public class ApiDataService : IDataService
         return response?.IsSuccessStatusCode == true;
     }
 
+    public async Task<AppUser?> GetUserByIdAsync(int userId)
+    {
+        return await SafeGetAsync<AppUser>($"api/auth/user/{userId}");
+    }
+
+    public async Task<(bool Success, string Message)> UpdateMerchantPaymentDetailsAsync(int merchantId, string? vcash, string? instapay)
+    {
+        var response = await SafePutAsync($"api/auth/merchant/{merchantId}/payment-details", new { VodafoneCashNumber = vcash, InstaPayId = instapay });
+        if (response == null) return (false, "خطأ في الاتصال بالسيرفر");
+        var result = await response.Content.ReadFromJsonAsync<AuthResult>();
+        return (result?.Success ?? false, result?.Message ?? "خطأ في معالجة البيانات");
+    }
+
     // ---- Products ----
     public async Task<List<Product>> GetProductsAsync()
     {

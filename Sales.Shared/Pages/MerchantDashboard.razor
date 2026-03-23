@@ -77,6 +77,28 @@
         </div>
     </div>
 
+    <!-- إعدادات الدفع -->
+    <div class="section-header">
+        <h2>إعدادات الدفع</h2>
+    </div>
+    <div class="payment-settings-card" style="background:#fff; padding:20px; border-radius:10px; margin-bottom:2rem; box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+        <div class="form-group mb-3">
+            <label>رقم فودافون كاش</label>
+            <input type="text" class="form-control" @bind="_vcash" placeholder="مثال: 01012345678" />
+        </div>
+        <div class="form-group mb-3">
+            <label>معرف انستاباي (InstaPay ID)</label>
+            <input type="text" class="form-control" @bind="_instapay" placeholder="مثال: user@instapay" />
+        </div>
+        <button class="btn btn-primary" @onclick="SavePaymentSettings" disabled="@_savingPayment">
+            @(_savingPayment ? "جارٍ الحفظ..." : "حفظ إعدادات الدفع")
+        </button>
+        @if (!string.IsNullOrEmpty(_paymentMsg))
+        {
+            <div class="alert mt-2 @(_paymentSuccess ? "alert-success" : "alert-error")" style="margin-top:10px;">@_paymentMsg</div>
+        }
+    </div>
+
     <!-- قائمة المنتجات -->
     <div class="section-header">
         <h2>منتجاتي</h2>
@@ -149,10 +171,17 @@
     private List<Product> _products = new();
     private int _ordersCount;
     private decimal _totalRevenue;
+    private string? _vcash;
+    private string? _instapay;
+    private bool _savingPayment;
+    private string _paymentMsg = "";
+    private bool _paymentSuccess;
 
     protected override async Task OnInitializedAsync()
     {
         if (!Auth.IsMerchant) return;
+        _vcash = Auth.CurrentUser?.VodafoneCashNumber;
+        _instapay = Auth.CurrentUser?.InstaPayId;
         await LoadData();
     }
 
@@ -190,6 +219,25 @@
                 Nav.NavigateTo("/login");
             }
         }
+    }
+
+    private async Task SavePaymentSettings()
+    {
+        _savingPayment = true;
+        _paymentMsg = "";
+        StateHasChanged();
+
+        var (success, msg) = await Data.UpdateMerchantPaymentDetailsAsync(Auth.CurrentUser!.Id, _vcash, _instapay);
+        _paymentSuccess = success;
+        _paymentMsg = msg;
+        
+        if (success && Auth.CurrentUser != null)
+        {
+            Auth.CurrentUser.VodafoneCashNumber = _vcash;
+            Auth.CurrentUser.InstaPayId = _instapay;
+        }
+
+        _savingPayment = false;
     }
 
     private async Task SimulatePayment()

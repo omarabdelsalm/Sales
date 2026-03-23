@@ -47,6 +47,10 @@
                             <span class="order-id">رقم الطلب: #@order.Id</span>
                             <span class="order-date">التاريخ: @order.OrderDate.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
                             <span class="order-paymethod">الدفع: @TranslatePayment(order.PaymentMethod)</span>
+                            @if (Auth.IsMerchant && !string.IsNullOrEmpty(order.PaymentReference))
+                            {
+                                <span class="order-payref">| المرجع: @order.PaymentReference</span>
+                            }
                         </div>
                         <div class="order-status-badge @GetStatusClass(order.Status)">
                             @TranslateStatus(order.Status)

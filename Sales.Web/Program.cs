@@ -54,6 +54,25 @@ using (var scope = app.Services.CreateScope())
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Database.EnsureCreated();
 
+        // -------------------------------------------------------------
+        // Auto-add new columns to avoid dropping database or using DB migrations 
+        // -------------------------------------------------------------
+        var isSqlite = db.Database.IsSqlite();
+        var isSqlServer = db.Database.IsSqlServer();
+        
+        try
+        {
+            if (isSqlite) db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN VodafoneCashNumber TEXT;");
+            else if (isSqlServer) db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD VodafoneCashNumber NVARCHAR(MAX);");
+        } catch { }
+
+        try
+        {
+            if (isSqlite) db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN InstaPayId TEXT;");
+            else if (isSqlServer) db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD InstaPayId NVARCHAR(MAX);");
+        } catch { }
+        // -------------------------------------------------------------
+
         // ---- Seed Default Admin ----
         var adminEmail = "admin@sales.com";
         if (!db.Users.Any(u => u.Role == Sales.Shared.Models.UserRole.Admin))

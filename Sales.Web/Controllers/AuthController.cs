@@ -44,7 +44,23 @@ public class AuthController : ControllerBase
         return success ? Ok() : BadRequest();
     }
 
+    [HttpGet("user/{userId}")]
+    public async Task<ActionResult<AppUser>> GetUser(int userId)
+    {
+        var user = await _data.GetUserByIdAsync(userId);
+        if (user == null) return NotFound();
+        return user;
+    }
+
+    [HttpPut("merchant/{merchantId}/payment-details")]
+    public async Task<ActionResult> UpdatePaymentDetails(int merchantId, [FromBody] UpdatePaymentRequest request)
+    {
+        var (success, message) = await _data.UpdateMerchantPaymentDetailsAsync(merchantId, request.VodafoneCashNumber, request.InstaPayId);
+        return Ok(new { Success = success, Message = message });
+    }
+
     public class LoginRequest { public string Email { get; set; } = ""; public string Password { get; set; } = ""; }
     public class RegisterRequest { public string FullName { get; set; } = ""; public string Email { get; set; } = ""; public string Password { get; set; } = ""; public UserRole Role { get; set; } public string? StoreName { get; set; } }
     public class SubscribeRequest { public int Months { get; set; } }
+    public class UpdatePaymentRequest { public string? VodafoneCashNumber { get; set; } public string? InstaPayId { get; set; } }
 }

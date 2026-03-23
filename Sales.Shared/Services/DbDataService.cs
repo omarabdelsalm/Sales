@@ -75,6 +75,23 @@ public class DbDataService : IDataService
         return true;
     }
 
+    public async Task<AppUser?> GetUserByIdAsync(int userId)
+    {
+        return await _db.Users.FirstOrDefaultAsync(u => u.Id == userId && !u.IsDeleted);
+    }
+
+    public async Task<(bool Success, string Message)> UpdateMerchantPaymentDetailsAsync(int merchantId, string? vcash, string? instapay)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == merchantId && !u.IsDeleted);
+        if (user == null || user.Role != UserRole.Merchant)
+            return (false, "المتجر غير موجود.");
+
+        user.VodafoneCashNumber = vcash?.Trim();
+        user.InstaPayId = instapay?.Trim();
+        await _db.SaveChangesAsync();
+        return (true, "تم تحديث بيانات الدفع بنجاح.");
+    }
+
     // ---- Products ----
     public async Task<List<Product>> GetProductsAsync()
     {
