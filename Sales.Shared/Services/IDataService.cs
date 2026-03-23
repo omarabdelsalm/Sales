@@ -10,6 +10,8 @@ public interface IDataService
     Task<AppUser?> LoginAsync(string email, string password);
     Task<(bool Success, string Message)> RegisterAsync(string fullName, string email, string password, UserRole role, string? storeName = null);
     Task<(bool Success, string Message)> DeleteAccountAsync(int userId);
+    Task<(bool Success, string Message)> UpdateMerchantPaymentDetailsAsync(int merchantId, string? vcash, string? instapay);
+    Task<AppUser?> GetUserByIdAsync(int userId);
     Task<bool> UpdateSubscriptionAsync(int userId, int months);
 
     // ---- Products ----

@@ -13,6 +13,8 @@ public class AppUser
     public string? PhoneNumber { get; set; }
     public string? StoreName { get; set; }  // للتجار فقط
     public DateTime? SubscriptionEndDate { get; set; } // تاريخ انتهاء الاشتراك أو التجربة
+    public string? VodafoneCashNumber { get; set; }
+    public string? InstaPayId { get; set; }
     public bool IsDeleted { get; set; } = false;
 
     // Navigation
