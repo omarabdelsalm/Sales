@@ -1,0 +1,150 @@
+@page "/admin/dashboard"
+@using Sales.Shared.Models
+@using Sales.Shared.Services
+@using Microsoft.EntityFrameworkCore
+@using Sales.Shared.Data
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject IDataService Data
+
+@if (!Auth.IsAdmin)
+{
+    Nav.NavigateTo("/login");
+    return;
+}
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <div>
+            <h1>🛡️ لوحة تحكم المدير</h1>
+            <p class="subtitle">إدارة اشتراكات التجار والمستخدمين</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-outline" @onclick="Logout">خروج</button>
+        </div>
+    </div>
+
+    <!-- إحصائيات سريعة -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">🏪</div>
+            <div class="stat-value">@_merchants.Count</div>
+            <div class="stat-label">إجمالي التجار</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">⚠️</div>
+            <div class="stat-value">@_merchants.Count(m => m.SubscriptionEndDate < DateTime.UtcNow)</div>
+            <div class="stat-label">اشتراكات منتهية</div>
+        </div>
+    </div>
+
+    <!-- قائمة التجار -->
+    <div class="section-header">
+        <h2>إدارة التجار</h2>
+    </div>
+
+    <div class="products-table-wrapper">
+        <table class="products-table">
+            <thead>
+                <tr>
+                    <th>التاجر / المتجر</th>
+                    <th>البريد الإلكتروني</th>
+                    <th>تاريخ انتهاء الاشتراك</th>
+                    <th>الحالة</th>
+                    <th>إجراءات الإدارة</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var m in _merchants)
+                {
+                    <tr>
+                        <td>
+                            <strong>@m.FullName</strong><br />
+                            <small class="text-muted">🏪 @m.StoreName</small>
+                        </td>
+                        <td>@m.Email</td>
+                        <td>@m.SubscriptionEndDate?.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                        <td>
+                            @if (m.SubscriptionEndDate < DateTime.UtcNow)
+                            {
+                                <span class="badge badge-danger">منتهي</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-success">نشط</span>
+                            }
+                        </td>
+                        <td class="actions">
+                            <button class="btn-sm btn-edit" @onclick="() => ExtendSubscription(m, 30)">➕ تمديد شهر</button>
+                            <button class="btn-sm btn-edit" @onclick="() => ExtendSubscription(m, 7)">➕ تمديد أسبوع</button>
+                            <button class="btn-sm btn-delete" @onclick="() => RevokeSubscription(m)">🚫 إنهاء الآن</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="toast">@_message</div>
+}
+
+@code {
+    private List<AppUser> _merchants = new();
+    private string _message = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.IsAdmin) return;
+        await LoadMerchants();
+    }
+
+    private async Task LoadMerchants()
+    {
+        _merchants = await Data.GetMerchantsAsync();
+    }
+
+    private async Task ExtendSubscription(AppUser merchant, int days)
+    {
+        var currentEnd = merchant.SubscriptionEndDate ?? DateTime.UtcNow;
+        if (currentEnd < DateTime.UtcNow) currentEnd = DateTime.UtcNow;
+
+        var newEnd = currentEnd.AddDays(days);
+        var success = await Data.UpdateSubscriptionAsync(merchant.Id, newEnd);
+        if (success)
+        {
+            await ShowMessage($"تم تمديد اشتراك {merchant.FullName} لمدة {days} يوم.");
+            await LoadMerchants();
+        }
+    }
+
+    private async Task RevokeSubscription(AppUser merchant)
+    {
+        var newEnd = DateTime.UtcNow.AddMinutes(-1);
+        var success = await Data.UpdateSubscriptionAsync(merchant.Id, newEnd);
+        if (success)
+        {
+            await ShowMessage($"تم إنهاء اشتراك {merchant.FullName} فوراً.");
+            await LoadMerchants();
+        }
+    }
+
+    private async Task ShowMessage(string msg)
+    {
+        _message = msg;
+        StateHasChanged();
+        await Task.Delay(3000);
+        _message = "";
+        StateHasChanged();
+    }
+
+    private void Logout()
+    {
+        Auth.Logout();
+        Nav.NavigateTo("/login");
+    }
+}

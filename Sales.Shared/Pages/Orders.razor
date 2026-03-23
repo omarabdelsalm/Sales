@@ -1,0 +1,157 @@
+@page "/orders"
+@using Sales.Shared.Models
+@using Sales.Shared.Services
+@using Sales.Shared.Data
+@using Microsoft.EntityFrameworkCore
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject IDataService Data
+
+@if (!Auth.IsLoggedIn)
+{
+    Nav.NavigateTo("/login");
+    return;
+}
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>📦 @(Auth.IsMerchant ? "الطلبات الواردة" : "طلباتي")</h1>
+    </div>
+
+    @if (_orders == null)
+    {
+        <div class="empty-state">
+            <div class="loader"></div>
+            <p>جارٍ تحميل الطلبات...</p>
+        </div>
+    }
+    else if (!_orders.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-icon">📦</div>
+            <p>لا توجد طلبات حالياً.</p>
+            @if (!Auth.IsMerchant)
+            {
+                <a href="/" class="btn btn-primary">ابدأ التسوق الآن</a>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="orders-list">
+            @foreach (var order in _orders)
+            {
+                <div class="order-card">
+                    <div class="order-card-header">
+                        <div class="order-meta">
+                            <span class="order-id">رقم الطلب: #@order.Id</span>
+                            <span class="order-date">التاريخ: @order.OrderDate.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                            <span class="order-paymethod">الدفع: @TranslatePayment(order.PaymentMethod)</span>
+                        </div>
+                        <div class="order-status-badge @GetStatusClass(order.Status)">
+                            @TranslateStatus(order.Status)
+                        </div>
+                    </div>
+
+                    <div class="order-items-list">
+                        @foreach (var item in order.Items)
+                        {
+                            <div class="order-item-row">
+                                <div class="order-item-info">
+                                    <span class="order-item-name">@item.Product?.Name</span>
+                                    <span class="order-item-qty">الكمية: @item.Quantity</span>
+                                </div>
+                                <div class="order-item-price">
+                                    <span>@item.UnitPrice.ToString("N2") ر.س</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="order-card-footer">
+                        <div class="order-total">
+                            إجمالي الطلب: <span>@order.TotalAmount.ToString("N2") ر.س</span>
+                        </div>
+                        
+                        @if (Auth.IsMerchant)
+                        {
+                            <div class="order-actions">
+                                @if (order.Status == OrderStatus.Pending)
+                                {
+                                    <button class="btn btn-primary-sm" @onclick="() => UpdateStatus(order, OrderStatus.Confirmed)">✅ تأكيد</button>
+                                    <button class="btn btn-delete btn-sm" @onclick="() => UpdateStatus(order, OrderStatus.Cancelled)">❌ إلغاء</button>
+                                }
+                                else if (order.Status == OrderStatus.Confirmed)
+                                {
+                                    <button class="btn btn-primary-sm" @onclick="() => UpdateStatus(order, OrderStatus.Shipped)">🚚 تم الشحن</button>
+                                }
+                                else if (order.Status == OrderStatus.Shipped)
+                                {
+                                    <button class="btn btn-primary-sm" @onclick="() => UpdateStatus(order, OrderStatus.Delivered)">🏁 تم التوصيل</button>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<Order>? _orders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOrders();
+    }
+
+    private async Task LoadOrders()
+    {
+        if (Auth.IsMerchant)
+        {
+            _orders = await Data.GetMerchantOrdersAsync(Auth.CurrentUser!.Id);
+        }
+        else
+        {
+            _orders = await Data.GetUserOrdersAsync(Auth.CurrentUser!.Id);
+        }
+    }
+
+    private async Task UpdateStatus(Order order, OrderStatus newStatus)
+    {
+        var success = await Data.UpdateOrderStatusAsync(order.Id, newStatus);
+        if (success)
+        {
+            await LoadOrders();
+        }
+    }
+
+    private string TranslatePayment(PaymentMethod method) => method switch
+    {
+        PaymentMethod.CashOnDelivery => "كاش عند الاستلام",
+        PaymentMethod.VodafoneCash => "فودافون كاش",
+        PaymentMethod.InstaPay => "انستاباي",
+        _ => method.ToString()
+    };
+
+    private string TranslateStatus(OrderStatus status) => status switch
+    {
+        OrderStatus.Pending => "قيد الانتظار",
+        OrderStatus.Confirmed => "تم التأكيد",
+        OrderStatus.Shipped => "تم الشحن",
+        OrderStatus.Delivered => "تم التوصيل",
+        OrderStatus.Cancelled => "تم الإلغاء",
+        _ => status.ToString()
+    };
+
+    private string GetStatusClass(OrderStatus status) => status switch
+    {
+        OrderStatus.Pending => "status-pending",
+        OrderStatus.Confirmed => "status-confirmed",
+        OrderStatus.Shipped => "status-shipped",
+        OrderStatus.Delivered => "status-delivered",
+        OrderStatus.Cancelled => "status-cancelled",
+        _ => ""
+    };
+}

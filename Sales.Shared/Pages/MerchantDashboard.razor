@@ -1,0 +1,209 @@
+@page "/merchant/dashboard"
+@using Sales.Shared.Models
+@using Sales.Shared.Services
+@using Microsoft.EntityFrameworkCore
+@using Sales.Shared.Data
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject IDataService Data
+@inject IJSRuntime JS
+
+@if (!Auth.IsMerchant)
+{
+    Nav.NavigateTo("/login");
+    return;
+}
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <div>
+            <h1>🏪 @Auth.CurrentUser!.StoreName</h1>
+            <p class="subtitle">مرحباً، @Auth.CurrentUser.FullName</p>
+        </div>
+        <div class="header-actions">
+            @if (!Auth.IsSubscriptionExpired)
+            {
+                <a href="/merchant/add-product" class="btn btn-primary">➕ إضافة منتج</a>
+            }
+            <button class="btn btn-outline" @onclick="Logout">خروج</button>
+            <button class="btn btn-delete" @onclick="DeleteAccount">حذف الحساب</button>
+        </div>
+    </div>
+
+    @if (Auth.IsMerchant)
+    {
+        <div class="subscription-banner @(Auth.IsSubscriptionExpired ? "expired" : "active")">
+            <div class="sub-info">
+                @if (Auth.IsSubscriptionExpired)
+                {
+                    <span class="sub-icon">⚠️</span>
+                    <div>
+                        <strong>انتهت الفترة التجريبية!</strong>
+                        <p>يرجى تجديد الاشتراك الشهري لتتمكن من إضافة أو تعديل المنتجات.</p>
+                    </div>
+                }
+                else
+                {
+                    <span class="sub-icon">📅</span>
+                    <div>
+                        <strong>حالة الاشتراك: نشط</strong>
+                        <p>ينتهي في: @Auth.CurrentUser?.SubscriptionEndDate?.ToLocalTime().ToString("yyyy-MM-dd")</p>
+                    </div>
+                }
+            </div>
+            @if (Auth.IsSubscriptionExpired)
+            {
+                <button class="btn btn-primary-sm" @onclick="SimulatePayment">💳 تجديد الآن</button>
+            }
+        </div>
+    }
+
+    <!-- إحصائيات سريعة -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">📦</div>
+            <div class="stat-value">@_products.Count</div>
+            <div class="stat-label">منتجاتي</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🛒</div>
+            <div class="stat-value">@_ordersCount</div>
+            <div class="stat-label">الطلبات</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-value">@_totalRevenue.ToString("N0") ر.س</div>
+            <div class="stat-label">إجمالي المبيعات</div>
+        </div>
+    </div>
+
+    <!-- قائمة المنتجات -->
+    <div class="section-header">
+        <h2>منتجاتي</h2>
+    </div>
+
+    @if (_products.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-icon">📦</div>
+            <p>لم تضف أي منتجات بعد</p>
+            <a href="/merchant/add-product" class="btn btn-primary">أضف أول منتج</a>
+        </div>
+    }
+    else
+    {
+        <div class="products-table-wrapper">
+            <table class="products-table">
+                <thead>
+                    <tr>
+                        <th>الصورة</th>
+                        <th>اسم المنتج</th>
+                        <th>السعر</th>
+                        <th>المخزون</th>
+                        <th>الحالة</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _products)
+                    {
+                        <tr>
+                            <td>
+                                @if (!string.IsNullOrEmpty(p.ImagePath))
+                                {
+                                    <img src="@p.ImagePath" alt="@p.Name" class="table-product-img" />
+                                }
+                                else
+                                {
+                                    <div class="img-placeholder">🖼️</div>
+                                }
+                            </td>
+                            <td>@p.Name</td>
+                            <td class="price">@p.Price.ToString("N2") ر.س</td>
+                            <td>@p.StockQuantity</td>
+                            <td>
+                                <span class="badge @(p.IsAvailable ? "badge-success" : "badge-danger")">
+                                    @(p.IsAvailable ? "متاح" : "غير متاح")
+                                </span>
+                            </td>
+                            <td class="actions">
+                                @if (!Auth.IsSubscriptionExpired)
+                                {
+                                    <a href="/merchant/edit-product/@p.Id" class="btn-sm btn-edit">✏️ تعديل</a>
+                                    <button class="btn-sm btn-delete" @onclick="() => DeleteProduct(p.Id)">🗑️ حذف</button>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">الاشتراك منتهي</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Product> _products = new();
+    private int _ordersCount;
+    private decimal _totalRevenue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.IsMerchant) return;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        var merchantId = Auth.CurrentUser!.Id;
+        _products = await Data.GetMerchantProductsAsync(merchantId);
+        _ordersCount = await Data.GetMerchantOrdersCountAsync(merchantId);
+        _totalRevenue = await Data.GetMerchantTotalRevenueAsync(merchantId);
+    }
+
+    private async Task DeleteProduct(int productId)
+    {
+        var result = await Data.DeleteProductAsync(productId, Auth.CurrentUser!.Id);
+        if (result.Success)
+        {
+            await LoadData();
+        }
+    }
+
+    private void Logout()
+    {
+        Auth.Logout();
+        Nav.NavigateTo("/login");
+    }
+
+    private async Task DeleteAccount()
+    {
+        bool confirmed = await JS.InvokeAsync<bool>("confirm", "هل أنت متأكد من رغبتك في حذف حسابك؟ لا يمكن التراجع عن هذا الإجراء.");
+        if (confirmed)
+        {
+            var result = await Auth.DeleteAccountAsync();
+            if (result.Success)
+            {
+                Nav.NavigateTo("/login");
+            }
+        }
+    }
+
+    private async Task SimulatePayment()
+    {
+        // محاكاة دفع وتجديد لمدة شهر
+        if (Auth.CurrentUser != null)
+        {
+            var success = await Data.UpdateSubscriptionAsync(Auth.CurrentUser.Id, 1);
+            if (success)
+            {
+                // تحديث الكائن الحالي في الجلسة ليعكس التغيير فوراً
+                Auth.CurrentUser.SubscriptionEndDate = (Auth.CurrentUser.SubscriptionEndDate ?? DateTime.UtcNow).AddMonths(1);
+                await LoadData();
+            }
+        }
+    }
+}

@@ -1,0 +1,183 @@
+@page "/"
+@using Sales.Shared.Models
+@using Sales.Shared.Services
+@using Sales.Shared.Data
+@using Microsoft.EntityFrameworkCore
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject IDataService Data
+@inject IJSRuntime JS
+
+<div class="storefront">
+    <!-- Top navigation bar -->
+    <nav class="topbar">
+        <div class="topbar-brand">🛒 <span>سوقنا</span></div>
+        <div class="topbar-search">
+            <input type="search" @bind="_search" @bind:event="oninput" placeholder="ابحث عن منتج..." class="search-input" />
+        </div>
+        <div class="topbar-actions">
+            @if (Auth.IsLoggedIn)
+            {
+                @if (Auth.IsAdmin)
+                {
+                    <a href="/admin/dashboard" class="btn-outline-sm" title="لوحة التحكم">🛡️ لوحة التحكم</a>
+                }
+                <a href="/orders" class="btn-outline-sm" title="الطلبات">📦</a>
+                <a href="/cart" class="btn-icon" title="السلة">🛍️ <span class="badge-count">@_cartCount</span></a>
+                <span class="welcome-msg">أهلاً، @Auth.CurrentUser!.FullName</span>
+                <button class="btn btn-outline-sm" @onclick="Logout">خروج</button>
+                <button class="btn-sm btn-delete" style="height: 34px; border-radius: 10px;" @onclick="DeleteAccount" title="حذف الحساب">🗑️</button>
+            }
+            else
+            {
+                <a href="/login" class="btn btn-primary-sm">دخول</a>
+                <a href="/register/customer" class="btn btn-outline-sm">تسجيل</a>
+            }
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <div class="hero">
+        <h1>اكتشف أفضل المنتجات</h1>
+        <p>تسوّق بسهولة وأمان من أكبر المتاجر</p>
+    </div>
+
+    <!-- Categories -->
+    @if (_categories.Any())
+    {
+        <div class="categories-bar">
+            <button class="cat-chip @(_selectedCategory == "" ? "active" : "")" @onclick='() => _selectedCategory = ""'>الكل</button>
+            @foreach (var cat in _categories)
+            {
+                <button class="cat-chip @(_selectedCategory == cat ? "active" : "")" @onclick="() => _selectedCategory = cat">@cat</button>
+            }
+        </div>
+    }
+
+    <!-- Products Grid -->
+    <div class="products-grid">
+        @foreach (var p in FilteredProducts)
+        {
+            <div class="product-card" @onclick="() => GoToProduct(p.Id)">
+                <div class="product-img-wrap">
+                    @if (!string.IsNullOrEmpty(p.ImagePath))
+                    {
+                        <img src="@p.ImagePath" alt="@p.Name" class="product-img" />
+                    }
+                    else
+                    {
+                        <div class="product-img-placeholder">🖼️</div>
+                    }
+                </div>
+                <div class="product-info">
+                    <div class="product-category">@p.Category</div>
+                    <h3 class="product-name">@p.Name</h3>
+                    <div class="product-merchant">@p.Merchant?.StoreName</div>
+                    <div class="product-footer">
+                        <span class="product-price">@p.Price.ToString("N2") ر.س</span>
+                        <button class="btn-add-cart" @onclick:stopPropagation="true"
+                                @onclick="() => AddToCart(p)" title="أضف للسلة">
+                            🛒
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (!FilteredProducts.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <p>لا توجد منتجات مطابقة</p>
+        </div>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(_toast))
+{
+    <div class="toast">@_toast</div>
+}
+
+@code {
+    private List<Product> _products = new();
+    private List<string> _categories = new();
+    private string _search = "";
+    private string _selectedCategory = "";
+    private int _cartCount;
+    private string _toast = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _products = await Data.GetProductsAsync();
+        _categories = _products.Select(p => p.Category).Distinct().Where(c => !string.IsNullOrEmpty(c)).ToList();
+        await RefreshCartCount();
+    }
+
+    private IEnumerable<Product> FilteredProducts => _products
+        .Where(p =>
+            (string.IsNullOrEmpty(_search) || p.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+             || p.Description.Contains(_search, StringComparison.OrdinalIgnoreCase))
+            && (string.IsNullOrEmpty(_selectedCategory) || p.Category == _selectedCategory));
+
+    private void GoToProduct(int id) => Nav.NavigateTo($"/product/{id}");
+
+    private async Task AddToCart(Product product)
+    {
+        if (!Auth.IsLoggedIn)
+        {
+            await ShowToast("يرجى تسجيل الدخول لإضافة منتجات للسلة");
+            await Task.Delay(1500);
+            Nav.NavigateTo("/login");
+            return;
+        }
+        if (Auth.IsMerchant)
+        {
+            await ShowToast("التجار لا يمكنهم الشراء");
+            return;
+        }
+
+        var result = await Data.AddToCartAsync(Auth.CurrentUser!.Id, product.Id, 1);
+        if (result.Success)
+        {
+            await RefreshCartCount();
+            await ShowToast($"تمت إضافة \"{product.Name}\" للسلة ✓");
+        }
+    }
+
+    private async Task RefreshCartCount()
+    {
+        if (!Auth.IsLoggedIn) return;
+        _cartCount = await Data.GetCartCountAsync(Auth.CurrentUser!.Id);
+    }
+
+    private async Task ShowToast(string msg)
+    {
+        _toast = msg;
+        StateHasChanged();
+        await Task.Delay(2500);
+        _toast = "";
+        StateHasChanged();
+    }
+
+    private void Logout()
+    {
+        Auth.Logout();
+        Nav.NavigateTo("/");
+    }
+
+    private async Task DeleteAccount()
+    {
+        bool confirmed = await JS.InvokeAsync<bool>("confirm", "هل أنت متأكد من رغبتك في حذف حسابك؟ لا يمكن التراجع عن هذا الإجراء.");
+        if (confirmed)
+        {
+            var result = await Auth.DeleteAccountAsync();
+            if (result.Success)
+            {
+                Nav.NavigateTo("/");
+            }
+        }
+    }
+}

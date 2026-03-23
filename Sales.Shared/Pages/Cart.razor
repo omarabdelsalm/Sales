@@ -1,0 +1,194 @@
+@page "/cart"
+@using Sales.Shared.Models
+@using Sales.Shared.Services
+@using Sales.Shared.Data
+@using Microsoft.EntityFrameworkCore
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject IDataService Data
+
+@if (!Auth.IsLoggedIn)
+{
+    Nav.NavigateTo("/login");
+    return;
+}
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>🛍️ سلة المشتريات</h1>
+        <a href="/" class="btn btn-outline">← متابعة التسوق</a>
+    </div>
+
+    @if (!_items.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-icon">🛒</div>
+            <p>سلتك فارغة</p>
+            <a href="/" class="btn btn-primary">ابدأ التسوق</a>
+        </div>
+    }
+    else
+    {
+        <div class="cart-layout">
+            <div class="cart-items">
+                @foreach (var item in _items)
+                {
+                    <div class="cart-item-card">
+                        @if (!string.IsNullOrEmpty(item.Product?.ImagePath))
+                        {
+                            <img src="@item.Product.ImagePath" alt="@item.Product?.Name" class="cart-item-img" />
+                        }
+                        else
+                        {
+                            <div class="cart-item-img-placeholder">🖼️</div>
+                        }
+                        <div class="cart-item-info">
+                            <h4>@item.Product?.Name</h4>
+                            <p class="cart-item-merchant">المتجر: @item.Product?.Merchant?.StoreName</p>
+                            <p class="cart-item-price">@item.Product?.Price.ToString("N2") ر.س</p>
+                        </div>
+                        <div class="cart-item-qty">
+                            <button class="qty-btn" @onclick="() => ChangeQty(item, -1)">➖</button>
+                            <span class="qty-value">@item.Quantity</span>
+                            <button class="qty-btn" @onclick="() => ChangeQty(item, 1)">➕</button>
+                        </div>
+                        <div class="cart-item-total">
+                            @((item.Product?.Price ?? 0) * item.Quantity) ر.س
+                        </div>
+                        <button class="btn-remove" @onclick="() => RemoveItem(item.ProductId)">🗑️</button>
+                    </div>
+                }
+            </div>
+
+            <!-- ملخص الطلب -->
+            <div class="cart-summary">
+                <h3>ملخص الطلب</h3>
+                <div class="summary-row">
+                    <span>المجموع الفرعي</span>
+                    <span>@_subtotal.ToString("N2") ر.س</span>
+                </div>
+                <div class="summary-row total">
+                    <span>الإجمالي</span>
+                    <strong>@_subtotal.ToString("N2") ر.س</strong>
+                </div>
+
+                <div class="payment-selection">
+                    <h4>طريقة الدفع</h4>
+                    <div class="payment-options">
+                        <label class="pay-option">
+                            <input type="radio" name="paymethod" value="@PaymentMethod.CashOnDelivery" 
+                                   checked="@(_selectedMethod == PaymentMethod.CashOnDelivery)" 
+                                   @onclick="() => _selectedMethod = PaymentMethod.CashOnDelivery" />
+                            <span>💵 كاش عند الاستلام</span>
+                        </label>
+                        <label class="pay-option">
+                            <input type="radio" name="paymethod" value="@PaymentMethod.VodafoneCash"
+                                   checked="@(_selectedMethod == PaymentMethod.VodafoneCash)"
+                                   @onclick="() => _selectedMethod = PaymentMethod.VodafoneCash" />
+                            <span>📲 فودافون كاش</span>
+                        </label>
+                        <label class="pay-option">
+                            <input type="radio" name="paymethod" value="@PaymentMethod.InstaPay"
+                                   checked="@(_selectedMethod == PaymentMethod.InstaPay)"
+                                   @onclick="() => _selectedMethod = PaymentMethod.InstaPay" />
+                            <span>💸 انستاباي</span>
+                        </label>
+                    </div>
+
+                    @if (_selectedMethod == PaymentMethod.VodafoneCash)
+                    {
+                        <div class="payment-instruction">
+                            📌 يرجى تحويل المبلغ إلى الرقم: <strong>01012345678</strong> ثم كتابة رقم العملية في الملاحظات.
+                        </div>
+                    }
+                    else if (_selectedMethod == PaymentMethod.InstaPay)
+                    {
+                        <div class="payment-instruction">
+                            📌 يرجى التحويل عبر انستاباي إلى: <strong>user@instapay</strong> ثم كتابة اسم المحول في الملاحظات.
+                        </div>
+                    }
+                </div>
+
+                @if (!string.IsNullOrEmpty(_orderMsg))
+                {
+                    <div class="alert @(_orderSuccess ? "alert-success" : "alert-error")">@_orderMsg</div>
+                }
+
+                <button class="btn btn-primary full-width" @onclick="PlaceOrder" disabled="@_loading">
+                    @(_loading ? "جارٍ الإرسال..." : "تأكيد الطلب 🚀")
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<CartItem> _items = new();
+    private decimal _subtotal;
+    private string _orderMsg = "";
+    private bool _orderSuccess;
+    private bool _loading;
+    private PaymentMethod _selectedMethod = PaymentMethod.CashOnDelivery;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.IsLoggedIn) return;
+        await LoadCart();
+    }
+
+    private async Task LoadCart()
+    {
+        _items = await Data.GetCartItemsAsync(Auth.CurrentUser!.Id);
+        _subtotal = _items.Sum(i => (i.Product?.Price ?? 0) * i.Quantity);
+    }
+
+    private async Task ChangeQty(CartItem item, int delta)
+    {
+        await Data.AddToCartAsync(Auth.CurrentUser!.Id, item.ProductId, delta);
+        await LoadCart();
+        StateHasChanged();
+    }
+
+    private async Task RemoveItem(int productId)
+    {
+        await Data.RemoveFromCartAsync(Auth.CurrentUser!.Id, productId);
+        await LoadCart();
+    }
+
+    private async Task PlaceOrder()
+    {
+        if (!_items.Any()) return;
+        _loading = true;
+
+        // Group items by merchant for separate orders
+        var byMerchant = _items.GroupBy(i => i.Product!.MerchantId);
+        foreach (var group in byMerchant)
+        {
+            var order = new Order
+            {
+                UserId = Auth.CurrentUser!.Id,
+                TotalAmount = group.Sum(i => (i.Product?.Price ?? 0) * i.Quantity),
+                Status = OrderStatus.Pending,
+                PaymentMethod = _selectedMethod,
+                Items = group.Select(i => new OrderItem
+                {
+                    ProductId = i.ProductId,
+                    Quantity = i.Quantity,
+                    UnitPrice = i.Product!.Price
+                }).ToList()
+            };
+            await Data.CreateOrderAsync(order);
+        }
+
+        // Clear cart
+        await Data.ClearCartAsync(Auth.CurrentUser!.Id);
+
+        _loading = false;
+        _orderSuccess = true;
+        _orderMsg = "🎉 تم تأكيد طلبك بنجاح! سنتواصل معك قريباً.";
+        _items.Clear();
+        _subtotal = 0;
+    }
+}

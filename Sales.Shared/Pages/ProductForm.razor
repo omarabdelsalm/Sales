@@ -1,0 +1,178 @@
+@page "/merchant/add-product"
+@page "/merchant/edit-product/{productId:int}"
+@using Sales.Shared.Models
+@using Sales.Shared.Services
+@using Sales.Shared.Data
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject IDataService Data
+@inject IFileUploadService FileUploader
+
+<div class="auth-container">
+    <div class="auth-card wide-card">
+        <h2>@(ProductId.HasValue ? "✏️ تعديل المنتج" : "➕ إضافة منتج جديد")</h2>
+
+        @if (Auth.IsSubscriptionExpired)
+        {
+            <div class="alert alert-error">
+                <strong>⚠️ عذراً، لا يمكنك الإضافة أو التعديل!</strong>
+                <p>لقد انتهت الفترة التجريبية الخاصة بك. يرجى تجديد الاشتراك من لوحة التحكم.</p>
+                <a href="/merchant/dashboard" class="btn btn-outline-sm" style="margin-top: 10px;">العودة للوحة التحكم</a>
+            </div>
+        }
+        else
+        {
+            @if (!string.IsNullOrEmpty(_message))
+            {
+                <div class="alert @(_success ? "alert-success" : "alert-error")">@_message</div>
+            }
+
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit">
+            <DataAnnotationsValidator />
+
+            <div class="form-group">
+                <label>اسم المنتج</label>
+                <input type="text" @bind="_model.Name" class="form-control" placeholder="مثال: جهاز لوحي" />
+            </div>
+
+            <div class="form-group">
+                <label>الوصف / المواصفات</label>
+                <textarea @bind="_model.Description" class="form-control textarea" rows="4"
+                          placeholder="اكتب مواصفات المنتج بالتفصيل..."></textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>السعر (ر.س)</label>
+                    <input type="number" @bind="_model.Price" class="form-control" step="0.01" min="0" placeholder="0.00" />
+                </div>
+                <div class="form-group">
+                    <label>الكمية المتوفرة</label>
+                    <input type="number" @bind="_model.StockQuantity" class="form-control" min="0" placeholder="0" />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>الفئة</label>
+                <input type="text" @bind="_model.Category" class="form-control" placeholder="مثال: إلكترونيات، ملابس..." />
+            </div>
+
+            <div class="form-group">
+                <label>رفع صورة المنتج</label>
+                <InputFile OnChange="HandleImageUpload" accept="image/*" class="form-control" />
+                @if (!string.IsNullOrEmpty(_previewImage))
+                {
+                    <img src="@_previewImage" alt="معاينة" class="img-preview" />
+                }
+            </div>
+
+            <div class="form-group checkbox-group">
+                <label>
+                    <input type="checkbox" @bind="_model.IsAvailable" />
+                    المنتج متاح للبيع
+                </label>
+            </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" disabled="@_loading">
+                        @(_loading ? "جارٍ الحفظ..." : (ProductId.HasValue ? "حفظ التعديلات" : "إضافة المنتج"))
+                    </button>
+                    <a href="/merchant/dashboard" class="btn btn-outline">إلغاء</a>
+                </div>
+            </EditForm>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public int? ProductId { get; set; }
+    private ProductModel _model = new();
+    private string _message = "";
+    private bool _success;
+    private bool _loading;
+    private string _previewImage = "";
+    private string? _savedImagePath;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.IsMerchant)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+        if (ProductId.HasValue)
+        {
+            var p = await Data.GetProductByIdAsync(ProductId.Value);
+            if (p is null || p.MerchantId != Auth.CurrentUser!.Id)
+            {
+                Nav.NavigateTo("/merchant/dashboard");
+                return;
+            }
+            _model = new ProductModel
+            {
+                Name = p.Name, Description = p.Description, Price = p.Price,
+                StockQuantity = p.StockQuantity, Category = p.Category, IsAvailable = p.IsAvailable
+            };
+            _previewImage = p.ImagePath ?? "";
+            _savedImagePath = p.ImagePath;
+        }
+    }
+
+    private async Task HandleImageUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+
+        await using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+        _savedImagePath = await FileUploader.SaveImageAsync(stream, file.Name);
+        _previewImage   = _savedImagePath;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (Auth.IsSubscriptionExpired)
+        {
+            _message = "لا يمكن الحفظ، الاشتراك منتهي.";
+            _success = false;
+            return;
+        }
+        _loading = true;
+        _message = "";
+
+        var product = new Product
+        {
+            Id = ProductId ?? 0,
+            Name = _model.Name,
+            Description = _model.Description,
+            Price = _model.Price,
+            StockQuantity = _model.StockQuantity,
+            Category = _model.Category,
+            IsAvailable = _model.IsAvailable,
+            MerchantId = Auth.CurrentUser!.Id,
+            ImagePath = _savedImagePath
+        };
+
+        var result = await Data.SaveProductAsync(product);
+        _success = result.Success;
+        _message = result.Message;
+
+        if (_success && !ProductId.HasValue)
+        {
+            _model = new ProductModel();
+            _previewImage = "";
+            _savedImagePath = null;
+        }
+
+        _loading = false;
+    }
+
+    private class ProductModel
+    {
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public decimal Price { get; set; }
+        public int StockQuantity { get; set; }
+        public string Category { get; set; } = "";
+        public bool IsAvailable { get; set; } = true;
+    }
+}

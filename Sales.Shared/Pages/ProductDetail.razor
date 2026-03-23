@@ -1,0 +1,143 @@
+@page "/product/{productId:int}"
+@using Sales.Shared.Models
+@using Sales.Shared.Services
+@using Sales.Shared.Data
+@using Microsoft.EntityFrameworkCore
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject IDataService Data
+
+@if (_product == null)
+{
+    @if (_loading)
+    {
+        <div class="empty-state">
+            <div class="loader"></div>
+            <p>جارٍ تحميل تفاصيل المنتج...</p>
+        </div>
+    }
+    else
+    {
+        <div class="empty-state">
+            <div class="empty-icon">⚠️</div>
+            <p>المعذرة، المنتج غير موجود.</p>
+            <a href="/" class="btn btn-primary">العودة للمتجر</a>
+        </div>
+    }
+}
+else
+{
+    <div class="dashboard-container">
+        <div class="product-detail-layout">
+            <div class="product-detail-image">
+                @if (!string.IsNullOrEmpty(_product.ImagePath))
+                {
+                    <img src="@_product.ImagePath" alt="@_product.Name" class="detail-img" />
+                }
+                else
+                {
+                    <div class="detail-img-placeholder">🖼️</div>
+                }
+            </div>
+
+            <div class="product-detail-info">
+                <nav class="breadcrumb">
+                    <a href="/">الرئيسية</a> / <span>@_product.Category</span>
+                </nav>
+                
+                <h1 class="detail-title">@_product.Name</h1>
+                <p class="detail-merchant">البائع: <span>@(_product.Merchant?.StoreName ?? "غير معروف")</span></p>
+                
+                <div class="detail-price">@_product.Price.ToString("N2") ر.س</div>
+                
+                <div class="detail-stock @(_product.StockQuantity > 0 ? "in-stock" : "out-of-stock")">
+                    @(_product.StockQuantity > 0 ? $"متوفر: {_product.StockQuantity} قطعة" : "نفد من المخزون")
+                </div>
+
+                <div class="detail-description">
+                    <h3>المواصفات والوصف</h3>
+                    <p>@_product.Description</p>
+                </div>
+
+                <div class="detail-actions">
+                    @if (_product.StockQuantity > 0)
+                    {
+                        <div class="qty-selector">
+                            <button class="qty-btn" @onclick="() => ChangeQty(-1)">➖</button>
+                            <span class="qty-value">@_quantity</span>
+                            <button class="qty-btn" @onclick="() => ChangeQty(1)">➕</button>
+                        </div>
+                        <button class="btn btn-primary full-width" @onclick="AddToCart">
+                            🛒 أضف إلى السلة
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-outline full-width" disabled>🚫 غير متوفر حالياً</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_toast))
+{
+    <div class="toast">@_toast</div>
+}
+
+@code {
+    [Parameter] public int ProductId { get; set; }
+    private Product? _product;
+    private bool _loading = true;
+    private int _quantity = 1;
+    private string _toast = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _product = await Data.GetProductByIdAsync(ProductId);
+        _loading = false;
+    }
+
+    private void ChangeQty(int delta)
+    {
+        var newQty = _quantity + delta;
+        if (newQty >= 1 && newQty <= (_product?.StockQuantity ?? 0))
+        {
+            _quantity = newQty;
+        }
+    }
+
+    private async Task AddToCart()
+    {
+        if (!Auth.IsLoggedIn)
+        {
+            await ShowToast("يرجى تسجيل الدخول لإضافة منتجات للسلة");
+            await Task.Delay(1500);
+            Nav.NavigateTo("/login");
+            return;
+        }
+        if (Auth.IsMerchant)
+        {
+            await ShowToast("التجار لا يمكنهم الشراء");
+            return;
+        }
+
+        var result = await Data.AddToCartAsync(Auth.CurrentUser!.Id, ProductId, _quantity);
+        if (result.Success)
+        {
+            await ShowToast($"تمت إضافة {_quantity} من \"{_product?.Name}\" ✓");
+        }
+    }
+
+    private async Task ShowToast(string msg)
+    {
+        _toast = msg;
+        StateHasChanged();
+        await Task.Delay(2500);
+        _toast = "";
+        StateHasChanged();
+    }
+}

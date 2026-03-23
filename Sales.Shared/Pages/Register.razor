@@ -1,0 +1,97 @@
+@page "/register/{roleType}"
+@using Sales.Shared.Models
+@using Sales.Shared.Services
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-logo">@(IsMerchant ? "🏪" : "🙋")</div>
+        <h2>@(IsMerchant ? "تسجيل تاجر جديد" : "تسجيل عميل جديد")</h2>
+        <p class="auth-subtitle">@(IsMerchant ? "انضم إلينا وابدأ بيع منتجاتك" : "سجّل وابدأ التسوق الآن")</p>
+
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="alert @(_success ? "alert-success" : "alert-error")">@_message</div>
+        }
+
+        <EditForm Model="_model" OnValidSubmit="HandleRegister">
+            <DataAnnotationsValidator />
+
+            <div class="form-group">
+                <label>الاسم الكامل</label>
+                <input type="text" @bind="_model.FullName" placeholder="محمد أحمد" class="form-control" />
+            </div>
+
+            @if (IsMerchant)
+            {
+                <div class="form-group">
+                    <label>اسم المتجر</label>
+                    <input type="text" @bind="_model.StoreName" placeholder="متجر النور" class="form-control" />
+                </div>
+            }
+
+            <div class="form-group">
+                <label>البريد الإلكتروني</label>
+                <input type="email" @bind="_model.Email" placeholder="example@mail.com" class="form-control" />
+            </div>
+
+            <div class="form-group">
+                <label>كلمة المرور</label>
+                <input type="password" @bind="_model.Password" placeholder="••••••••" class="form-control" />
+            </div>
+
+            <div class="form-group">
+                <label>رقم الهاتف (اختياري)</label>
+                <input type="tel" @bind="_model.PhoneNumber" placeholder="+966xxxxxxxxx" class="form-control" />
+            </div>
+
+            <button type="submit" class="btn btn-primary" disabled="@_loading">
+                @if (_loading) { <span>جارٍ التسجيل...</span> } else { <span>تسجيل</span> }
+            </button>
+        </EditForm>
+
+        <div class="auth-footer">
+            لديك حساب؟ <a href="/login">تسجيل الدخول</a>
+            <div style="margin-top: 15px; border-top: 1px solid #eee; pt-3">
+                <a href="/" class="btn-link">تصفح كزائر</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string RoleType { get; set; } = "customer";
+    private bool IsMerchant => RoleType == "merchant";
+
+    private RegisterModel _model = new();
+    private string _message = "";
+    private bool _success = false;
+    private bool _loading = false;
+
+    private async Task HandleRegister()
+    {
+        _loading = true;
+        _message = "";
+        var role = IsMerchant ? UserRole.Merchant : UserRole.Customer;
+        var (success, msg) = await Auth.RegisterAsync(
+            _model.FullName, _model.Email, _model.Password, role, _model.StoreName);
+        _loading = false;
+        _success = success;
+        _message = msg;
+        if (success)
+        {
+            await Task.Delay(1500);
+            Nav.NavigateTo("/login");
+        }
+    }
+
+    private class RegisterModel
+    {
+        public string FullName    { get; set; } = "";
+        public string Email       { get; set; } = "";
+        public string Password    { get; set; } = "";
+        public string? StoreName  { get; set; }
+        public string? PhoneNumber { get; set; }
+    }
+}
